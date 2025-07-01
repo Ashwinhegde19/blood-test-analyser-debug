@@ -152,3 +152,23 @@ This endpoint retrieves the status and result of a previously submitted task.
       "error": null
     }
     ```
+## **Analysis of Existing Bugs**
+
+This analysis reflects the current state of the codebase.
+
+1.  **`agents.py`: Critical Missing `tools` Parameter**
+    *   The following agents are initialized without the required `tools` parameter. This will prevent them from using any tools, such as the one for reading PDF reports.
+        *   `verifier`
+        *   `nutritionist`
+        *   `exercise_specialist`
+    *   **Impact:** This is a critical bug. Any task assigned to these agents that requires reading the blood report will fail, preventing the crew from completing its analysis correctly.
+
+2.  **`tools.py`: Unused and Incomplete Tools**
+    *   The file defines `NutritionTool` and `ExerciseTool` classes.
+    *   These tools are **never imported or used** anywhere in the application. They are dead code.
+    *   Furthermore, their methods are just placeholders and return simple strings like `"This is a placeholder for nutrition analysis"`.
+    *   **Impact:** This makes the codebase confusing and harder to maintain.
+
+3.  **`task.py`: Ineffective Task Definitions**
+    *   The tasks `nutrition_analysis` and `exercise_planning` are assigned to agents (`nutritionist` and `exercise_specialist`) that cannot function correctly due to the missing `tools` parameter mentioned in the first point.
+    *   **Impact:** These tasks will not execute as intended, making the core functionality of the application incomplete.
