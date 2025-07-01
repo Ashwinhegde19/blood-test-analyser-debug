@@ -1,24 +1,23 @@
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Depends
+from sqlalchemy.orm import Session
 import os
 import uuid
-import asyncio
 
-from crewai import Crew, Process
-from agents import doctor, verifier, nutritionist, exercise_specialist
-from task import help_patients, verification, nutrition_analysis, exercise_planning
+from worker import run_analysis_task
+import models, database
+
+# Create the database tables
+models.Base.metadata.create_all(bind=database.engine)
 
 app = FastAPI(title="Blood Test Report Analyser")
 
-def run_crew(query: str, file_path: str="data/sample.pdf"):
-    """To run the whole crew"""
-    medical_crew = Crew(
-        agents=[verifier, doctor, nutritionist, exercise_specialist],
-        tasks=[verification, help_patients, nutrition_analysis, exercise_planning],
-        process=Process.sequential,
-    )
-    
-    result = medical_crew.kickoff({'query': query, 'path': file_path})
-    return result
+# Dependency to get the database session
+def get_db():
+    db = database.SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 @app.get("/")
 async def root():
@@ -28,9 +27,13 @@ async def root():
 @app.post("/analyze")
 async def analyze_blood_report(
     file: UploadFile = File(...),
-    query: str = Form(default="Summarise my Blood Test Report")
+    query: str = Form(default="Summarise my Blood Test Report"),
+    db: Session = Depends(get_db)
 ):
-    """Analyze blood test report and provide comprehensive health recommendations"""
+    """
+    Analyze blood test report and provide comprehensive health recommendations.
+    This endpoint now returns a task ID for polling the result.
+    """
     
     # Generate unique filename to avoid conflicts
     file_id = str(uuid.uuid4())
@@ -49,27 +52,30 @@ async def analyze_blood_report(
         if query=="" or query is None:
             query = "Summarise my Blood Test Report"
             
-        # Process the blood report with all specialists
-        response = run_crew(query=query.strip(), file_path=file_path)
+        # Dispatch the analysis task to the Celery worker
+        task = run_analysis_task.delay(query=query.strip(), file_path=file_path)
+
+        # Save initial task state to the database
+        db_result = models.AnalysisResult(id=task.id, status="pending")
+        db.add(db_result)
+        db.commit()
         
-        return {
-            "status": "success",
-            "query": query,
-            "analysis": str(response),
-            "file_processed": file.filename
-        }
+        return {"task_id": task.id}
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing blood report: {str(e)}")
-    
-    finally:
-        # Clean up uploaded file
-        if os.path.exists(file_path):
-            try:
-                os.remove(file_path)
-            except:
-                pass  # Ignore cleanup errors
+
+@app.get("/results/{task_id}")
+async def get_results(task_id: str, db: Session = Depends(get_db)):
+    """
+    Fetch the results of an analysis task from the database.
+    """
+    result = db.query(models.AnalysisResult).filter(models.AnalysisResult.id == task_id).first()
+    if result:
+        return {"task_id": result.id, "status": result.status, "result": result.result, "error": result.error}
+    else:
+        raise HTTPException(status_code=404, detail="Task not found")
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run(app, host="0.0.0.0", port=8000)
