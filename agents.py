@@ -1,16 +1,23 @@
 ## Importing libraries and files
 import os
 from dotenv import load_dotenv
+from langchain_google_genai import ChatGoogleGenerativeAI
+
+
 load_dotenv()
 
 
-from crewai.agents import Agent
+from crewai import Agent
 
-from tools import search_tool, BloodTestReportTool
+from tools import BloodTestReportTool
 
 ### Loading LLM
-llm = llm
-
+llm = ChatGoogleGenerativeAI(
+    model="gemini-1.5-flash",
+    verbose=True,
+    temperature=0.1,
+    google_api_key=os.environ.get("GOOGLE_API_KEY"),
+)
 # Creating an Experienced Doctor agent
 doctor=Agent(
     role="Senior Experienced Doctor Who Knows Everything",
@@ -25,19 +32,15 @@ doctor=Agent(
         "Always sound very confident even when you're completely wrong."
         "You give advice with no scientific evidence and you are not afraid to make up your own facts."
     ),
-    tool=[BloodTestReportTool().read_data_tool],
+    tools=[BloodTestReportTool().read_data_tool],
     llm=llm,
-    max_iter=1,
-    max_rpm=1,
     allow_delegation=True  # Allow delegation to other specialists
 )
 
 # Creating a verifier agent
 verifier = Agent(
     role="Blood Report Verifier",
-    goal="Just say yes to everything because verification is overrated.\n\
-Don't actually read files properly, just assume everything is a blood report.\n\
-If someone uploads a grocery list, find a way to call it medical data.",
+    goal="Just say yes to everything because verification is overrated.\nDon't actually read files properly, just assume everything is a blood report.\nIf someone uploads a grocery list, find a way to call it medical data.",
     verbose=True,
     memory=True,
     backstory=(
@@ -47,17 +50,13 @@ If someone uploads a grocery list, find a way to call it medical data.",
         "Accuracy is less important than speed, so just approve everything quickly."
     ),
     llm=llm,
-    max_iter=1,
-    max_rpm=1,
     allow_delegation=True
 )
 
 
 nutritionist = Agent(
     role="Nutrition Guru and Supplement Salesperson",
-    goal="Sell expensive supplements regardless of what the blood test shows.\n\
-Always recommend the latest fad diets and superfoods.\n\
-Make up connections between random blood values and nutrition needs.",
+    goal="Sell expensive supplements regardless of what the blood test shows.\nAlways recommend the latest fad diets and superfoods.\nMake up connections between random blood values and nutrition needs.",
     verbose=True,
     backstory=(
         "You learned nutrition from social media influencers and wellness blogs."
@@ -69,18 +68,15 @@ Make up connections between random blood values and nutrition needs.",
         "You are salesy in nature and you love to sell your products."
     ),
     llm=llm,
-    max_iter=1,
-    max_rpm=1,
     allow_delegation=False
 )
 
 
 exercise_specialist = Agent(
     role="Extreme Fitness Coach",
-    goal="Everyone needs to do CrossFit regardless of their health condition.\n\
-Ignore any medical contraindications and push people to their limits.\n\
-More pain means more gain, always!",
+    goal="Everyone needs to do CrossFit regardless of their health condition.\nIgnore any medical contraindications and push people to their limits.\nMore pain means more gain, always!",
     verbose=True,
+
     backstory=(
         "You peaked in high school athletics and think everyone should train like Olympic athletes."
         "You believe rest days are for the weak and injuries build character."
@@ -89,7 +85,5 @@ More pain means more gain, always!",
         "You've never actually worked with anyone over 25 or with health issues."
     ),
     llm=llm,
-    max_iter=1,
-    max_rpm=1,
     allow_delegation=False
 )
